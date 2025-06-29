@@ -1,0 +1,19 @@
+src/
+├── config/
+│   ├── __init__.py
+│   ├── compressor_config.py
+│   └── optimization_config.py
+├── geometry/
+│   ├── __init__.py
+│   ├── rack_profile.py
+│   ├── rotor_generation.py
+│   └── volume_calculator.py
+├── optimization/
+│   ├── __init__.py
+│   ├── objective_function.py
+│   └── optimizer.py
+├── utils/
+│   ├── __init__.py
+│   └── csv_loader.py
+├── __init__.py
+└── main.py 
