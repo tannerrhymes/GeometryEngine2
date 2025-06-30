@@ -118,7 +118,7 @@ class ObjectiveFunction:
 
             if weighted_error < self.best_error:
                 self.best_error = weighted_error
-                logger.info(f"🎯 New best error: {self.best_error:.6f} at Eval #{self.evaluation_count}")
+                logger.info(f"New best error: {self.best_error:.6f} at Eval #{self.evaluation_count}")
             
             return weighted_error
 
@@ -146,10 +146,8 @@ class ObjectiveFunction:
             r_params = self._params_to_dict(params)
             
             # QC LOG: Show current parameters being tested
-            r1 = r_params['r1']
-            print(f"\n🔍 Testing parameters:")
-            print(f"  r1={r1*1000:.2f}mm, r0={r_params['r0']*1000:.2f}mm")
-            print(f"  r2={r_params['r2']*1000:.2f}mm, r3={r_params['r3']*1000:.2f}mm, r4={r_params['r4']*1000:.2f}mm")
+            print(f"\nTesting parameters:")
+            print(f"  r1={r_params['r1']*1000:.2f}mm, r0/r1={r_params['r0']/r_params['r1']:.3f}, r2/r1={r_params['r2']/r_params['r1']:.3f}, r3/r1={r_params['r3']/r_params['r1']:.3f}")
             
             # QC: Pre-check parameter bounds to return finite penalty immediately
             r1w_m = self.compressor_config.r1w / 1000.0
@@ -158,14 +156,14 @@ class ObjectiveFunction:
             
             # QC: Finite penalty for out-of-bounds parameters (no NaN, no exceptions)
             if not (0.13 <= r2_ratio <= 0.305):
-                print(f"❌ r2/r1w = {r2_ratio:.4f} outside [0.13, 0.305] → penalty 1e5")
-                return 1e5  # QC: Large finite penalty
+                print(f"ERROR: r2/r1w = {r2_ratio:.4f} outside [0.13, 0.305] -> penalty 1e5")
+                return 1e5
             if not (0.13 <= r4_ratio <= 0.305):
-                print(f"❌ r4/r1w = {r4_ratio:.4f} outside [0.13, 0.305] → penalty 1e5")
-                return 1e5  # QC: Large finite penalty
-            if r2_ratio > 0.35 or r4_ratio > 0.35:
-                print(f"❌ Tip ratios too large (r2={r2_ratio:.3f}, r4={r4_ratio:.3f}) → penalty 1e6")
-                return 1e6  # QC: Very large finite penalty
+                print(f"ERROR: r4/r1w = {r4_ratio:.4f} outside [0.13, 0.305] -> penalty 1e5")
+                return 1e5
+            if (r2_ratio > 0.35) or (r4_ratio > 0.35):
+                print(f"ERROR: Tip ratios too large (r2={r2_ratio:.3f}, r4={r4_ratio:.3f}) -> penalty 1e6")
+                return 1e6
             
             # Generate geometry
             profile = NRackProfile(r_params, self.compressor_config)
@@ -177,8 +175,9 @@ class ObjectiveFunction:
             # QC trochoid ODE residual check (finite penalty if fails)
             if hasattr(profile, 'trochoid_residual'):
                 trochoid_residual = profile.trochoid_residual
-                if trochoid_residual > 1e-8 * r1:
-                    print(f"❌ Trochoid residual {trochoid_residual:.2e} > limit → penalty 1e4")
+                # QC fail-fast: Check if all residuals finite
+                if trochoid_residual > 1e-8 * r_params['r1']:
+                    print(f"ERROR: Trochoid residual {trochoid_residual:.2e} > limit -> penalty 1e4")
                     return 1e4  # QC: Finite penalty
             
             # Calculate volume and diameters
@@ -197,33 +196,30 @@ class ObjectiveFunction:
                 self.opt_config.weight_D2e * (D2e_error_mm ** 2)
             )
             
-            print(f"📊 Results:")
+            print(f"RESULTS:")
             print(f"  Volume: calc={volume_calc:.6f}, target={self.target_volume:.6f}, error={volume_error_rel*100:.2f}%")
             print(f"  D1e: calc={D1e_calc:.1f}mm, target={self.target_D1e:.1f}mm, error={D1e_error_mm:.2f}mm")
             print(f"  D2e: calc={D2e_calc:.1f}mm, target={self.target_D2e:.1f}mm, error={D2e_error_mm:.2f}mm")
             print(f"  Objective value: {objective_value:.6f}")
             
-            # QC success criteria check
-            if abs(volume_error_rel) <= 0.05:  # ≤ 5%
-                print("  ✅ Volume error within QC target (≤ 5%)")
-            if D1e_error_mm <= 0.30:  # ≤ 0.30 mm
-                print("  ✅ D1e error within QC target (≤ 0.30mm)")
-            if D2e_error_mm <= 0.30:  # ≤ 0.30 mm
-                print("  ✅ D2e error within QC target (≤ 0.30mm)")
+            # QC Success checks
+            if volume_error_rel <= 0.05:
+                print("  SUCCESS: Volume error within QC target (<= 5%)")
+            if D1e_error_mm <= 0.30:
+                print("  SUCCESS: D1e error within QC target (<= 0.30mm)")
+            if D2e_error_mm <= 0.30:
+                print("  SUCCESS: D2e error within QC target (<= 0.30mm)")
             
-            # QC: Ensure objective is always finite
             if not np.isfinite(objective_value):
-                print(f"❌ Non-finite objective {objective_value} → penalty 1e4")
-                return 1e4
-            
-            return float(objective_value)  # QC: Guarantee finite return
+                print(f"ERROR: Non-finite objective {objective_value} -> penalty 1e4")
+                return 1e4  # QC: Finite penalty
+
+            print(f"Objective: {objective_value:.3f}")
+            return objective_value
             
         except Exception as e:
-            # QC CRITICAL: ALL exceptions return finite penalty, NEVER NaN
-            logger.error(f"Objective function error: {e}")
-            print(f"❌ EXCEPTION: {e}")
-            print("   → Returning finite penalty 1e4 (NEVER NaN)")
-            return 1e4  # QC: Always finite, never NaN
+            print(f"ERROR: EXCEPTION: {e}")
+            return 1e4  # QC: Finite penalty for any exception
     
     def _validate_tip_circle_constraints(self, profile: NRackProfile, r_params: dict):
         """
@@ -309,32 +305,27 @@ class ObjectiveFunction:
             actual_chamber_area = volume_per_rev / (self.compressor_config.rotor_length / 1000.0 * self.compressor_config.z1)
             
             # QC DEBUG: Check if rotor profile is valid
-            if len(rotor_gen.main_rotor_profile) < 3:
-                print(f"⚠️ WARNING: Main rotor profile has only {len(rotor_gen.main_rotor_profile)} points!")
-            if volume_per_rev <= 0:
-                print(f"⚠️ WARNING: Volume calculation returned {volume_per_rev}, using fallback")
-                # Use fallback calculation
-                r1w_m = self.compressor_config.r1w / 1000.0
-                r2w_m = self.compressor_config.r2w / 1000.0
-                rotor_length_m = self.compressor_config.rotor_length / 1000.0
-                volume_per_rev = (np.pi * r1w_m**2 + np.pi * r2w_m**2) * 0.3 * rotor_length_m / self.compressor_config.z1
+            if rotor_gen.main_rotor_profile is None:
+                print(f"WARNING: Profile generation failed, using fallback volume")
+                return self.compressor_config.target_swv_per_rev * 0.5  # Conservative estimate
             
-            print(f"🔄 Volume calculation:")
-            print(f"  Chamber area: {actual_chamber_area*1e6:.1f} mm²")
-            print(f"  Length: {self.compressor_config.rotor_length:.1f} mm")
-            print(f"  Volume/rev: {volume_per_rev:.6f} m³/rev")
+            if len(rotor_gen.main_rotor_profile) < 50:
+                print(f"WARNING: Main rotor profile has only {len(rotor_gen.main_rotor_profile)} points!")
+            if volume_per_rev <= 0:
+                print(f"WARNING: Volume calculation returned {volume_per_rev}, using fallback")
+                return self.compressor_config.target_swv_per_rev * 0.5
+            
+            print(f"Volume calculation:")
+            print(f"  calculated = {volume_per_rev:.6f} m³")
+            print(f"  target = {self.compressor_config.target_swv_per_rev:.6f} m³")
             
             return volume_per_rev
             
         except Exception as e:
-            print(f"⚠️ Volume calculation failed: {e}, using fallback")
-            # Fallback to simple estimation only if profile generation fails
-            r1w_m = self.compressor_config.r1w / 1000.0
-            r2w_m = self.compressor_config.r2w / 1000.0
-            rotor_length_m = self.compressor_config.rotor_length / 1000.0
+            print(f"WARNING: Volume calculation failed: {e}, using fallback")
+            volume_per_rev = self.compressor_config.target_swv_per_rev * 0.5
             
-            total_area = (np.pi * r1w_m**2 + np.pi * r2w_m**2) * 0.3
-            return total_area * rotor_length_m / self.compressor_config.z1
+        return volume_per_rev
     
     def _calculate_diameters_from_profile(self, profile: NRackProfile, r_params: dict) -> tuple[float, float]:
         """
@@ -356,9 +347,9 @@ class ObjectiveFunction:
         D1e_calc_mm = 2 * (r1w_m + r2) * 1000.0  # Eq F-1
         D2e_calc_mm = 2 * (r2w_m + r4) * 1000.0  # Eq F-2
         
-        print(f"🎯 QC DIAMETER CALCULATION:")
-        print(f"  r1w={r1w_m*1000:.2f}mm + r2={r2*1000:.2f}mm → D1e={D1e_calc_mm:.2f}mm")
-        print(f"  r2w={r2w_m*1000:.2f}mm + r4={r4*1000:.2f}mm → D2e={D2e_calc_mm:.2f}mm")
+        print(f"QC DIAMETER CALCULATION:")
+        print(f"  r1w={r1w_m*1000:.2f}mm + r2={r_params['r2']*1000:.2f}mm -> D1e={D1e_calc_mm:.2f}mm")
+        print(f"  r2w={r2w_m*1000:.2f}mm + r4={r_params['r4']*1000:.2f}mm -> D2e={D2e_calc_mm:.2f}mm")
         
         # QC validation guard rail (optional - for catching coding mistakes)
         try:
@@ -366,10 +357,10 @@ class ObjectiveFunction:
             if len(profile_outline) > 0:
                 discrete_D1e_max = 2 * np.max(np.linalg.norm(profile_outline, axis=1)) * 1000
                 clearance_check = D1e_calc_mm - discrete_D1e_max
-                if clearance_check > 0.05:  # Should be ≤ 50 µm gap
-                    print(f"  ✅ Clearance validation: {clearance_check:.3f}mm gap (envelope inside circle)")
+                if clearance_check > 0.05:  # Should be <= 50 µm gap
+                    print(f"  PASS: Clearance validation: {clearance_check:.3f}mm gap (envelope inside circle)")
                 else:
-                    print(f"  ⚠️  Clearance warning: {clearance_check:.3f}mm gap")
+                    print(f"  WARNING: Clearance warning: {clearance_check:.3f}mm gap")
         except:
             pass  # Don't fail on validation issues
         

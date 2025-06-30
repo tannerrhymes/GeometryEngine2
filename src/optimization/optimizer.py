@@ -79,9 +79,9 @@ class CompressorOptimizer:
         logger.info(f"QC Parameter bounds (SIMPLE - per QC feedback):")
         logger.info(f"  r1: [{0.8*r1_center*1000:.1f}, {1.3*r1_center*1000:.1f}] mm")
         logger.info(f"  r0/r1: [0.035, 0.060]")
-        logger.info(f"  r2/r1: [0.150, 0.350] ← WIDENED")
+        logger.info(f"  r2/r1: [0.150, 0.350] WIDENED")
         logger.info(f"  r3/r1: [0.090, 0.200]")
-        logger.info(f"  Constraint r2/r1w ≤ 0.305 enforced in objective function")
+        logger.info(f"  Constraint r2/r1w <= 0.305 enforced in objective function")
         
         return bounds
 
@@ -116,12 +116,23 @@ class CompressorOptimizer:
         Returns:
             A dictionary containing the results of the optimization.
         """
-        logger.info("🚀 Starting Sprint 3A optimization with L-BFGS-B")
+        logger.info("Starting Sprint 3A optimization with L-BFGS-B")
         start_time = time.time()
         
-        # Get initial guess and bounds
-        initial_guess = self._get_initial_guess()
+        # Set up bounds  
         bounds = self._get_parameter_bounds()
+        initial_guess = self._get_initial_guess()
+        
+        # Calculate r1_center for logging (same as in _get_parameter_bounds)
+        target_D1e_m = self.compressor_config.target_D1e / 1000.0
+        r1_center = (target_D1e_m / 2) * 0.92
+        
+        logger.info(f"QC Parameter bounds (SIMPLE - per QC feedback):")
+        logger.info(f"  r1: [{0.8*r1_center*1000:.1f}, {1.3*r1_center*1000:.1f}] mm")
+        logger.info(f"  r0/r1: [0.035, 0.060]")
+        logger.info(f"  r2/r1: [0.150, 0.350] WIDENED")
+        logger.info(f"  r3/r1: [0.090, 0.200]")
+        logger.info(f"  Constraint r2/r1w <= 0.305 enforced in objective function")
         
         # QC-approved L-BFGS-B optimization with proper settings
         logger.info("Starting L-BFGS-B optimization with QC settings...")
@@ -153,14 +164,14 @@ class CompressorOptimizer:
                     # Volume will be calculated by the actual objective function
                     current_obj = self.objective_function(xk)
                     
-                    print(f"\n📈 QC ITERATION {self.iteration_count}: Obj={current_obj:.0f}, ΔD1={D1e_error_mm:+.1f}mm, ΔD2={D2e_error_mm:+.1f}mm")
+                    print(f"\nQC ITERATION {self.iteration_count}: Obj={current_obj:.0f}, D1={D1e_error_mm:+.1f}mm, D2={D2e_error_mm:+.1f}mm")
                     
                     # QC: Check if within acceptance criteria
                     if abs(D1e_error_mm) <= 0.30 and abs(D2e_error_mm) <= 0.30:
-                        print("🎉 QC DIAMETER CRITERIA MET! D1e and D2e errors ≤ 0.30mm")
+                        print("QC DIAMETER CRITERIA MET! D1e and D2e errors <= 0.30mm")
                     
                 except Exception as e:
-                    print(f"📈 Iter {self.iteration_count}: Progress calculation error: {e}")
+                    print(f"Iter {self.iteration_count}: Progress calculation error: {e}")
         
         # QC: Updated settings per QC specifications with fallback algorithms
         algorithms_to_try = [
@@ -200,18 +211,19 @@ class CompressorOptimizer:
                 
                 # If successful, use this result
                 if result.success:
-                    logger.info(f"✅ {algorithm} converged successfully!")
+                    logger.info(f"SUCCESS: {algorithm} converged successfully!")
                     break
                 else:
-                    logger.warning(f"❌ {algorithm} failed: {result.message}")
+                    logger.warning(f"ERROR: {algorithm} failed: {result.message}")
                     
             except Exception as e:
-                logger.warning(f"❌ {algorithm} crashed: {e}")
+                logger.warning(f"ERROR: {algorithm} crashed: {e}")
                 continue
         
         # Handle case where all algorithms failed
         if result is None:
-            logger.error("❌ ALL optimization algorithms failed!")
+            logger.error("ERROR: ALL optimization algorithms failed!")
+            from scipy.optimize import OptimizeResult
             result = OptimizeResult({
                 'success': False,
                 'message': 'All optimization algorithms failed',
@@ -233,25 +245,22 @@ class CompressorOptimizer:
             try:
                 from ..geometry.rack_profile import NRackProfile
                 test_profile = NRackProfile(final_params, self.compressor_config)
-                logger.info("✅ QC validation: Final geometry validation complete")
+                logger.info("SUCCESS: QC validation: Final geometry validation complete")
             except Exception as e:
                 logger.warning(f"Final geometry validation failed: {e}")
                 final_error = np.inf
             
-            logger.info(f"✅ L-BFGS-B converged successfully!")
-            logger.info(f"   Final parameters: {final_params}")
-            logger.info(f"   Final objective: {final_error:.6e}")
-            logger.info(f"   Iterations: {result.nit}")
-            logger.info(f"   Function evaluations: {result.nfev}")
-            logger.info(f"   Time: {optimization_time:.1f}s")
+            logger.info(f"SUCCESS: L-BFGS-B converged successfully!")
+            logger.info(f"Optimization completed in {optimization_time:.2f} seconds")
+            logger.info(f"Final objective value: {result.fun:.6f}")
+            logger.info(f"Iterations: {result.nit}, Function evaluations: {result.nfev}")
             
         else:
             final_params = None
             final_error = np.inf
-            logger.warning(f"❌ L-BFGS-B failed to converge: {result.message}")
-            logger.info(f"   Best objective found: {result.fun:.6e}")
-            logger.info(f"   Function evaluations: {result.nfev}")
-            logger.info(f"   Time: {optimization_time:.1f}s")
+            logger.warning(f"ERROR: L-BFGS-B failed to converge: {result.message}")
+            logger.warning(f"Final objective value: {result.fun:.6f}")
+            logger.warning(f"Iterations: {result.nit}, Function evaluations: {result.nfev}")
         
         return {
             'success': result.success and final_error < np.inf,

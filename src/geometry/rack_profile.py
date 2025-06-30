@@ -76,10 +76,10 @@ class NRackProfile:
         if r4_ratio > 0.35:
             print(f"⚠️  Gate tip radius very large: r4/r1w = {r4_ratio:.3f} > 0.35")
         
-        print(f"🎯 QC ANALYTIC TIP CENTERS:")
+        print(f"QC ANALYTIC TIP CENTERS:")
         print(f"  Main tip center: ({self.main_tip_center[0]*1000:.2f}, {self.main_tip_center[1]*1000:.2f}) mm")
         print(f"  Gate tip center: ({self.gate_tip_center[0]*1000:.2f}, {self.gate_tip_center[1]*1000:.2f}) mm")
-        print(f"  r2/r1w = {r2_ratio:.3f}, r4/r1w = {r4_ratio:.3f} ✅ Within bounds")
+        print(f"  r2/r1w = {r2_ratio:.3f}, r4/r1w = {r4_ratio:.3f} SUCCESS: Within bounds")
         
         # Initialize geometry
         self.arc_centers = {}
@@ -125,10 +125,10 @@ class NRackProfile:
                     # QC: Remove HJ "clearance" check - it's not a real clearance
                     # HJ distance is axial distance between tip centers, not radial clearance
                     
-                    print(f"✅ QC RESIDUALS PASS:")
-                    print(f"  H circle residual: {h_circle_residual*1e6:.3f} µm (< 1 µm) ✅")
-                    print(f"  J circle residual: {j_circle_residual*1e6:.3f} µm (< 1 µm) ✅")
-                    print(f"  GH clearance: {gh_distance*1e3:.3f}mm ✅")
+                    print(f"SUCCESS: QC RESIDUALS PASS:")
+                    print(f"  H circle residual: {h_circle_residual*1e6:.3f} µm (< 1 µm) PASS")
+                    print(f"  J circle residual: {j_circle_residual*1e6:.3f} µm (< 1 µm) PASS")
+                    print(f"  GH clearance: {gh_distance*1e3:.3f}mm PASS")
                     
                     # Return residuals in micrometers for logging
                     return (
@@ -171,7 +171,7 @@ class NRackProfile:
         # Initialize geometry constants for trochoid generation (after r1w_m is available)
         self.geo_constants = GeometryConstants(self.r1w_m)
         
-        print(f"🔧 Initialized tip centers: Main ({self.main_tip_center[0]*1000:.2f}, {self.main_tip_center[1]*1000:.2f}) mm, "
+        print(f"DEBUG: Initialized tip centers: Main ({self.main_tip_center[0]*1000:.2f}, {self.main_tip_center[1]*1000:.2f}) mm, "
               f"Gate ({self.gate_tip_center[0]*1000:.2f}, {self.gate_tip_center[1]*1000:.2f}) mm")
         
     def _solve_all_junctions_simultaneously(self):
@@ -222,7 +222,7 @@ class NRackProfile:
                     actual_residuals = self._calculate_all_residuals(res.x)
                     max_residual = np.max(np.abs(actual_residuals))
                     
-                    print(f"🔧 Solver attempt {attempt+1}: max residual = {max_residual:.2e}")
+                    print(f"DEBUG: Solver attempt {attempt+1}: max residual = {max_residual:.2e}")
                     
                     # Track best solution
                     if max_residual < best_residual:
@@ -231,24 +231,24 @@ class NRackProfile:
                     
                     # QC success criteria: < 1µm for circle constraints
                     if self._validate_qc_precision(res.x):
-                        print(f"✅ QC precision achieved on attempt {attempt+1}")
+                        print(f"SUCCESS: QC precision achieved on attempt {attempt+1}")
                         self.success = True
                         self._set_points_from_solution(res.x)
                         return
                         
             except Exception as e:
-                print(f"⚠️  Solver attempt {attempt+1} failed: {e}")
+                print(f"WARNING: Solver attempt {attempt+1} failed: {e}")
                 continue
 
         # Use best solution found if no QC precision achieved
         if best_solution is not None:
-            print(f"⚠️  Using best solution found: max residual = {best_residual:.2e}")
+            print(f"WARNING: Using best solution found: max residual = {best_residual:.2e}")
             self.success = True
             self._set_points_from_solution(best_solution)
             return
 
         # Complete failure
-        print(f"❌ Junction solver failed to converge after all attempts")
+        print(f"ERROR: Junction solver failed to converge after all attempts")
         self.success = False
 
     def _calculate_weighted_residuals(self, unknowns: np.ndarray) -> np.ndarray:
@@ -301,7 +301,7 @@ class NRackProfile:
             return (h_residual < qc_tolerance and j_residual < qc_tolerance)
                     
         except Exception as e:
-            print(f"⚠️  QC validation failed: {e}")
+            print(f"WARNING: QC validation failed: {e}")
             return False
     
     def _get_intelligent_initial_guess(self) -> np.ndarray:
@@ -345,11 +345,11 @@ class NRackProfile:
             # Check if residuals are reasonable (not NaN, not too large)
             if (np.any(np.isnan(intelligent_residuals)) or np.any(np.abs(intelligent_residuals) > 50) or
                 np.max(np.abs(intelligent_residuals)) > np.max(np.abs(heuristic_residuals))):
-                print("⚠️  Intelligent refinement not better, using heuristic base")
+                print("WARNING: Intelligent refinement not better, using heuristic base")
                 return heuristic_guess
                 
         except Exception:
-            print("⚠️  Intelligent guess validation failed, using heuristic fallback")
+            print("WARNING: Intelligent guess validation failed, using heuristic fallback")
             return heuristic_guess
             
         return intelligent_guess
@@ -376,13 +376,13 @@ class NRackProfile:
                 
             # Check for numerical issues
             if np.any(np.isnan(jacobian)) or np.any(np.isinf(jacobian)):
-                print("⚠️  Jacobian has numerical issues, using identity fallback")
+                print("WARNING: Jacobian has numerical issues, using identity fallback")
                 return np.eye(5)
                 
             return jacobian
             
         except Exception as e:
-            print(f"⚠️  Jacobian calculation failed: {e}, using identity fallback")
+            print(f"WARNING: Jacobian calculation failed: {e}, using identity fallback")
             return np.eye(5)
 
     def _get_trochoid_point_and_tangent(self, rotor_type: str, theta: float, radius: float) -> tuple[np.ndarray, np.ndarray]:
@@ -458,7 +458,7 @@ class NRackProfile:
         self.arc_centers['JA'] = self.main_tip_center.copy()
         self.arc_centers['GATE_TIP'] = self.gate_tip_center.copy()
         
-        print(f"🔧 QC FIX: Consistent tip centers stored in arc_centers:")
+        print(f"DEBUG: QC FIX: Consistent tip centers stored in arc_centers:")
         print(f"  JA center: ({self.arc_centers['JA'][0]*1000:.2f}, {self.arc_centers['JA'][1]*1000:.2f}) mm")
         print(f"  GATE_TIP center: ({self.arc_centers['GATE_TIP'][0]*1000:.2f}, {self.arc_centers['GATE_TIP'][1]*1000:.2f}) mm")
 
@@ -668,10 +668,10 @@ class NRackProfile:
                 arc_center = center1 if dist1 < dist2 else center2
                 radius = tip_radius
                 
-                print(f"🔧 Gate tip center computed from points G-H: ({arc_center[0]*1000:.2f}, {arc_center[1]*1000:.2f}) mm")
+                print(f"DEBUG: Gate tip center computed from points G-H: ({arc_center[0]*1000:.2f}, {arc_center[1]*1000:.2f}) mm")
                 
             except ValueError as e:
-                print(f"⚠️  Could not compute tip center from points G-H: {e}")
+                print(f"WARNING: Could not compute tip center from points G-H: {e}")
                 # Fallback to midpoint for debugging
                 arc_center = (g_point + h_point) / 2.0
                 radius = np.linalg.norm(g_point - h_point) / 2.0
@@ -760,10 +760,10 @@ class NRackProfile:
                 arc_center = center1 if dist1 < dist2 else center2
                 radius = tip_radius
                 
-                print(f"🔧 Main tip center computed from points H-J: ({arc_center[0]*1000:.2f}, {arc_center[1]*1000:.2f}) mm")
+                print(f"DEBUG: Main tip center computed from points H-J: ({arc_center[0]*1000:.2f}, {arc_center[1]*1000:.2f}) mm")
                 
             except ValueError as e:
-                print(f"⚠️  Could not compute tip center from points H-J: {e}")
+                print(f"WARNING: Could not compute tip center from points H-J: {e}")
                 # Fallback to midpoint for debugging
                 arc_center = (h_point + j_point) / 2.0
                 radius = np.linalg.norm(h_point - j_point) / 2.0
@@ -846,7 +846,7 @@ class NRackProfile:
                 endpoint_distance = np.linalg.norm(gh_points[-1] - hj_points[0])
                 if endpoint_distance >= 1e-6:
                     # Temporarily disable for debugging - QC: remove after fix
-                    print(f"⚠️  DEBUG: GH-HJ endpoints too far apart: {endpoint_distance*1e6:.1f} µm")
+                    print(f"WARNING: DEBUG: GH-HJ endpoints too far apart: {endpoint_distance*1e6:.1f} µm")
                     # raise ValueError(f"GH-HJ endpoints too far apart: {endpoint_distance*1e6:.1f} µm")
                 
                 # Check C¹ continuity (QC requirement: < 1e-8 * r₁w²)
@@ -861,7 +861,7 @@ class NRackProfile:
                 continuity_tolerance = 1e-8 * self.r1w_m**2
                 if abs(cross_product) >= continuity_tolerance:
                     # Temporarily disable for debugging - QC: remove after fix
-                    print(f"⚠️  DEBUG: C¹ continuity check failed at H: |v_GH × v_HJ| = {abs(cross_product):.2e} > {continuity_tolerance:.2e}")
+                    print(f"WARNING: DEBUG: C¹ continuity check failed at H: |v_GH × v_HJ| = {abs(cross_product):.2e} > {continuity_tolerance:.2e}")
                     # raise ValueError(f"C¹ continuity check failed at H: |v_GH × v_HJ| = {abs(cross_product):.2e} > {continuity_tolerance:.2e}")
         else:
             # Fallback to straight lines when feature flag is False
@@ -941,7 +941,7 @@ class NRackProfile:
         h_dist = np.linalg.norm(H - self.gate_tip_center)
         j_dist = np.linalg.norm(J - self.main_tip_center)
         
-        print(f"🔧 Profile Points Generated:")
+        print(f"DEBUG: Profile Points Generated:")
         print(f"  H at ({H[0]*1000:.3f}, {H[1]*1000:.3f}) mm, dist to gate center: {h_dist*1000:.6f} mm")
         print(f"  J at ({J[0]*1000:.3f}, {J[1]*1000:.3f}) mm, dist to main center: {j_dist*1000:.6f} mm")
         print(f"  Target r4={self.r4*1000:.3f} mm, r2={self.r2*1000:.3f} mm")

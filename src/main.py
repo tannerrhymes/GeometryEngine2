@@ -51,12 +51,12 @@ def main():
     pprint.pprint(results)
 
     if results['success']:
-        print("\n✅ Optimization successful!")
+        print("\nSUCCESS: Optimization successful!")
         print("Found optimal parameters (in meters):")
         for param, value in results['final_params'].items():
             print(f"  - {param}: {value:.6f}")
     else:
-        print("\n❌ Optimization failed or did not converge to a satisfactory solution.")
+        print("\nERROR: Optimization failed or did not converge to a satisfactory solution.")
         print(f"  - Reason: {results.get('message', 'No message provided.')}")
 
 if __name__ == "__main__":
