@@ -1,4 +1,6 @@
-numpy
 scipy
+numpy
 pandas
+matplotlib
+pytest
 shapely 

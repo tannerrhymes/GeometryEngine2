@@ -20,8 +20,8 @@ def main():
     script_dir = os.path.dirname(__file__)
     csv_path = os.path.join(script_dir, '..', '..', 'Master_updated.csv')
     
-    # Define the model to be optimized
-    model_to_optimize = "Frick NGC 150 B"
+    # Define the model to be optimized - QC approved target for Sprint 3A
+    model_to_optimize = "Frick NGC 100 A"
 
     print("--- Screw Compressor Geometry Optimizer ---")
     print(f"Loading data from: {os.path.abspath(csv_path)}")
@@ -53,7 +53,7 @@ def main():
     if results['success']:
         print("\n✅ Optimization successful!")
         print("Found optimal parameters (in meters):")
-        for param, value in results['optimized_parameters'].items():
+        for param, value in results['final_params'].items():
             print(f"  - {param}: {value:.6f}")
     else:
         print("\n❌ Optimization failed or did not converge to a satisfactory solution.")
